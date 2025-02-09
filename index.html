@@ -197,7 +197,7 @@
 
       // Define the API endpoint and initial query parameters.
       const baseUrl = `https://blockscout.lisk.com/api/v2/addresses/${address}/transactions`;
-      const initialParams = { filter: 'to | from' };
+      const initialParams = { filter: 'from' };
 
       const now = new Date();
       const startDateISO = startDate.toISOString().substring(0, 10);
@@ -235,7 +235,7 @@
           if (stopPagination || !data.next_page_params) {
             keepFetching = false;
           } else {
-            currentParams = { filter: 'to | from', ...data.next_page_params };
+            currentParams = { filter: 'from', ...data.next_page_params };
           }
         }
       } catch (error) {
