@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Transaction Streak Analyzer</title>
+  <style>
+    /* ----- Global Styles ----- */
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 2rem auto;
+      padding: 1rem;
+      background: linear-gradient(135deg, #e2e8f0, #f4f4f4);
+      color: #333;
+      line-height: 1.6;
+    }
+    h1, h2, h3 {
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+    p {
+      text-align: center;
+    }
+    form {
+      margin: 1rem 0;
+      text-align: center;
+    }
+    input, button {
+      padding: 0.5rem 0.75rem;
+      margin: 0.5rem;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      cursor: pointer;
+      background-color: #3498db;
+      color: #fff;
+      border: none;
+    }
+    button:hover {
+      background-color: #2980b9;
+    }
+    
+    /* ----- Container Styles ----- */
+    #status-container {
+      text-align: center;
+      font-weight: bold;
+      margin: 1rem 0;
+      min-height: 2em;
+    }
+    #results, #log {
+      background: #fff;
+      border: 1px solid #ddd;
+      padding: 1rem;
+      margin-top: 1rem;
+      border-radius: 5px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    #results h2, #results h3 {
+      margin-top: 0;
+    }
+    /* Limit the height of the log and style it slightly smaller */
+    #log {
+      white-space: pre-wrap;
+      overflow: auto;
+      max-height: 200px;
+      font-size: 0.9rem;
+      display: none; /* Hidden by default */
+    }
+    /* Style for the toggle log button */
+    #toggle-log-btn {
+      display: block;
+      margin: 0.5rem auto;
+      background-color: #2ecc71;
+    }
+    #toggle-log-btn:hover {
+      background-color: #27ae60;
+    }
+    /* Style for the preformatted block */
+    pre {
+      background: #f9f9f9;
+      padding: 1rem;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+    
+    /* ----- Spinner Styles ----- */
+    #spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #3498db;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-left: 10px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <h1>Transaction Streak Analyzer</h1>
+  <p>Enter a blockchain address and a start date (YYYY-MM-DD) to analyze your transaction streaks.</p>
+  
+  <form id="analyzer-form">
+    <input type="text" id="address" placeholder="Enter address" required>
+    <input type="date" id="start-date" required>
+    <button type="submit">Analyze</button>
+  </form>
+  
+  <div id="status-container">
+    <span id="status"></span>
+  </div>
+  
+  <button id="toggle-log-btn" onclick="toggleLog()">Show Log Details</button>
+  <div id="log"></div>
+  
+  <div id="results"></div>
+
+  <script>
+    // ----- Configuration -----
+    const MAX_RETRIES = 1000;
+    const INITIAL_BACKOFF = 1000; // 1 second
+
+    // ----- Helper functions for UI updates -----
+    function addLog(message) {
+      const logEl = document.getElementById('log');
+      logEl.textContent += message + "\n";
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function setStatus(message, showSpinner = false) {
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = message;
+      if (showSpinner) {
+        statusEl.innerHTML += ' <span id="spinner"></span>';
+      }
+    }
+
+    function clearOutput() {
+      document.getElementById('log').textContent = "";
+      document.getElementById('results').textContent = "";
+      setStatus("");
+    }
+
+    // ----- Toggle Log Details Visibility -----
+    function toggleLog() {
+      const logEl = document.getElementById('log');
+      const toggleBtn = document.getElementById('toggle-log-btn');
+      if (logEl.style.display === 'none' || logEl.style.display === '') {
+        logEl.style.display = 'block';
+        toggleBtn.textContent = 'Hide Log Details';
+      } else {
+        logEl.style.display = 'none';
+        toggleBtn.textContent = 'Show Log Details';
+      }
+    }
+
+    // ----- Helper: Fetch with retry -----
+    async function fetchWithRetry(url, retries = MAX_RETRIES, backoff = INITIAL_BACKOFF) {
+      let lastError;
+      for (let i = 0; i < retries; i++) {
+        try {
+          addLog(`Fetching: ${url}`);
+          const response = await fetch(url);
+          if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+          }
+          return await response.json();
+        } catch (error) {
+          lastError = error;
+          addLog(`Attempt ${i + 1} failed: ${error.message}. Retrying in ${backoff}ms...`);
+          if (i < retries - 1) {
+            await new Promise(resolve => setTimeout(resolve, backoff));
+            backoff *= 2;
+          }
+        }
+      }
+      throw lastError;
+    }
+
+    // ----- Main Analysis Function -----
+    async function analyzeTransactions(address, startDateStr) {
+      clearOutput();
+
+      // Validate and parse the start date.
+      const startDate = new Date(startDateStr);
+      if (isNaN(startDate)) {
+        setStatus("Invalid start date format. Please use YYYY-MM-DD.");
+        return;
+      }
+
+      // Define the API endpoint and initial query parameters.
+      const baseUrl = `https://blockscout.lisk.com/api/v2/addresses/${address}/transactions`;
+      const initialParams = { filter: 'to | from' };
+
+      const now = new Date();
+      const startDateISO = startDate.toISOString().substring(0, 10);
+      const nowISO = now.toISOString().substring(0, 10);
+      addLog(`Checking transactions from ${startDateISO} to ${nowISO} (UTC)`);
+
+      // ----- Fetch transactions and record active days -----
+      const daysWithTransaction = new Set();
+      let currentParams = { ...initialParams };
+      let keepFetching = true;
+
+      setStatus("Fetching transactions, please wait...", true);
+      try {
+        while (keepFetching) {
+          const queryString = new URLSearchParams(currentParams).toString();
+          const url = `${baseUrl}?${queryString}`;
+          const data = await fetchWithRetry(url);
+
+          if (!data.items || !Array.isArray(data.items)) {
+            throw new Error("Unexpected response format: missing 'items' array.");
+          }
+
+          let stopPagination = false;
+          for (const tx of data.items) {
+            if (!tx.timestamp) continue;
+            const txDate = new Date(tx.timestamp);
+            if (txDate < startDate) {
+              stopPagination = true;
+              break;
+            }
+            const txDateStr = tx.timestamp.substring(0, 10);
+            daysWithTransaction.add(txDateStr);
+          }
+
+          if (stopPagination || !data.next_page_params) {
+            keepFetching = false;
+          } else {
+            currentParams = { filter: 'to | from', ...data.next_page_params };
+          }
+        }
+      } catch (error) {
+        setStatus("An error occurred while fetching data.");
+        addLog("Error: " + error.message);
+        return;
+      }
+
+      // ----- Build daily timeline and compute streak segments -----
+      const missingDays = [];
+      const segments = [];
+      let currentSegment = 0;
+
+      // Iterate day-by-day from the start date (UTC) to today.
+      let day = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate()));
+      const endDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      while (day <= endDay) {
+        const dateStr = day.toISOString().substring(0, 10);
+        if (daysWithTransaction.has(dateStr)) {
+          currentSegment++;
+        } else {
+          missingDays.push(dateStr);
+          if (currentSegment > 0) {
+            segments.push(currentSegment);
+            currentSegment = 0;
+          }
+        }
+        day.setUTCDate(day.getUTCDate() + 1);
+      }
+      if (currentSegment > 0) {
+        segments.push(currentSegment);
+      }
+
+      // ----- Calculate complete streak blocks across all segments -----
+      let totalComplete7 = 0;
+      let totalComplete30 = 0;
+      for (const seg of segments) {
+        totalComplete7 += Math.floor(seg / 7);
+        totalComplete30 += Math.floor(seg / 30);
+      }
+
+      // ----- Determine current (ongoing) streak progress -----
+      let ongoingSegment = 0;
+      const todayStr = endDay.toISOString().substring(0, 10);
+      if (daysWithTransaction.has(todayStr)) {
+        ongoingSegment = segments.length ? segments[segments.length - 1] : 0;
+      }
+      const currentProgress7 = ongoingSegment % 7;
+      const currentProgress30 = ongoingSegment % 30;
+
+      // ----- Display the results -----
+      setStatus("Analysis complete.");
+      const resultsEl = document.getElementById('results');
+      resultsEl.innerHTML = `
+        <h2>Streak Summary</h2>
+        <p>Total complete 7-day streaks: <strong>${totalComplete7}</strong></p>
+        <p>Total complete 30-day streaks: <strong>${totalComplete30}</strong></p>
+        <h3>Current ongoing streak progress</h3>
+        <p>${
+          ongoingSegment === 0
+            ? 'No current streak (today has no transaction).'
+            : `Ongoing streak length: <strong>${ongoingSegment}</strong> day(s)<br>
+               → 7-day progress: <strong>${currentProgress7}/7</strong><br>
+               → 30-day progress: <strong>${currentProgress30}/30</strong>`
+        }</p>
+        <h3>Days with NO transactions (UTC)</h3>
+        <pre>${missingDays.join('\n')}</pre>
+      `;
+    }
+
+    // ----- Form Submission Handler -----
+    document.getElementById('analyzer-form').addEventListener('submit', function(event) {
+      event.preventDefault();
+      const address = document.getElementById('address').value.trim();
+      const startDate = document.getElementById('start-date').value;
+      if (!address || !startDate) {
+        setStatus("Please provide both address and start date.");
+        return;
+      }
+      analyzeTransactions(address, startDate);
+    });
+  </script>
+</body>
+</html>
