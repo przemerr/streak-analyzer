@@ -278,11 +278,21 @@
       }
 
       // ----- Determine current (ongoing) streak progress -----
-      let ongoingSegment = 0;
-      const todayStr = endDay.toISOString().substring(0, 10);
-      if (daysWithTransaction.has(todayStr)) {
-        ongoingSegment = segments.length ? segments[segments.length - 1] : 0;
+      let ongoingSegment = segments.length ? segments[segments.length - 1] : 0;
+
+      // Get the current UTC date (midnight) and determine the boundaries of today.
+      const currentUTCMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      const todayStr = currentUTCMidnight.toISOString().substring(0, 10);
+      const nextUTCMidnight = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+
+      // If no transaction has been recorded today but we are still before the next UTC midnight,
+      // the current streak (from yesterday) is still “in progress.”
+      let pendingNote = "";
+      if (!daysWithTransaction.has(todayStr) && now < nextUTCMidnight) {
+        pendingNote = " (today's progress is pending)";
       }
+
+      // Compute progress toward the next 7- and 30-day streak blocks.
       const currentProgress7 = ongoingSegment % 7;
       const currentProgress30 = ongoingSegment % 30;
 
@@ -296,8 +306,8 @@
         <h3>Current ongoing streak progress</h3>
         <p>${
           ongoingSegment === 0
-            ? 'No current streak (today has no transaction).'
-            : `Ongoing streak length: <strong>${ongoingSegment}</strong> day(s)<br>
+            ? 'No current streak.'
+            : `Ongoing streak length: <strong>${ongoingSegment}</strong> day(s)${pendingNote}<br>
                → 7-day progress: <strong>${currentProgress7}/7</strong><br>
                → 30-day progress: <strong>${currentProgress30}/30</strong>`
         }</p>
