@@ -294,8 +294,8 @@
       }
 
       // Compute progress toward the next 7- and 30-day streak blocks.
-      const currentProgress7 = ongoingSegment % 7;
-      const currentProgress30 = ongoingSegment % 30;
+      const currentProgress7 = (ongoingSegment % 7 === 0 && ongoingSegment > 0) ? 7 : ongoingSegment % 7;
+      const currentProgress30 = (ongoingSegment % 30 === 0 && ongoingSegment > 0) ? 30 : ongoingSegment % 30;
 
       // ----- Display the results -----
       setStatus("Analysis complete.");
