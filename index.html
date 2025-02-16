@@ -270,6 +270,14 @@
         segments.push(currentSegment);
       }
 
+      // ----- Filter missed days to show only days after the first transaction (if any) -----
+      let displayedMissingDays = missingDays;
+      if (daysWithTransaction.size > 0) {
+        // Since dates are in YYYY-MM-DD, sorting as strings works.
+        const firstTxDate = Array.from(daysWithTransaction).sort()[0];
+        displayedMissingDays = missingDays.filter(day => day >= firstTxDate);
+      }
+
       // ----- Calculate complete streak blocks across all segments -----
       // For 1-day streaks, every day with a transaction counts.
       const totalComplete1 = daysWithTransaction.size;
@@ -319,8 +327,8 @@
                → 7-day progress: <strong>${currentProgress7}/7</strong><br>
                → 30-day progress: <strong>${currentProgress30}/30</strong>`
         }</p>
-        <h3>Days with NO transactions (UTC)</h3>
-        <pre>${missingDays.join('\n')}</pre>
+        <h3>Days with NO transactions (UTC) starting from the first transaction</h3>
+        <pre>${displayedMissingDays.join('\n')}</pre>
       `;
     }
 
