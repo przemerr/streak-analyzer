@@ -307,8 +307,8 @@
       const currentProgress7 = (ongoingSegment % 7 === 0 && ongoingSegment > 0) ? 7 : ongoingSegment % 7;
       const currentProgress30 = (ongoingSegment % 30 === 0 && ongoingSegment > 0) ? 30 : ongoingSegment % 30;
 
-      // For 1-day streak, any ongoing streak means the day is complete.
-      const currentProgress1 = ongoingSegment >= 1 ? "1/1" : "0/1";
+      // For the 1-day streak, directly check if today's transaction exists.
+      const currentProgress1 = daysWithTransaction.has(todayStr) ? "1/1" : "0/1";
 
       // ----- Display the results -----
       setStatus("Analysis complete.");
